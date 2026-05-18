@@ -1,0 +1,65 @@
+import streamlit as st
+import pandas as pd
+
+st.set_page_config(page_title="Agrupación Excel", layout="wide")
+
+st.title("📊 Agrupación de Excel de Seguimiento de Obra")
+
+archivos = st.file_uploader(
+    "Sube uno o varios archivos Excel",
+    type=["xlsx"],
+    accept_multiple_files=True
+)
+
+if archivos:
+    lista_dfs = []
+
+    for archivo in archivos:
+        df = pd.read_excel(archivo)
+        df["Archivo origen"] = archivo.name
+        lista_dfs.append(df)
+
+    # Unir todos los archivos
+    df_total = pd.concat(lista_dfs, ignore_index=True)
+
+    # Eliminar duplicados
+    df_total.drop_duplicates(inplace=True)
+
+    # Ordenar por fecha
+    if "Fecha" in df_total.columns:
+        df_total["Fecha"] = pd.to_datetime(df_total["Fecha"], errors="coerce")
+        df_total.sort_values("Fecha", inplace=True)
+
+    st.subheader("📋 Datos unificados")
+    st.dataframe(df_total)
+
+    # Tabla resumen
+    if all(col in df_total.columns for col in ["Tarea", "Estado", "Trabajador"]):
+        resumen = pd.pivot_table(
+            df_total,
+            index="Tarea",
+            columns="Estado",
+            values="Trabajador",
+            aggfunc="count",
+            fill_value=0
+        )
+
+        st.subheader("📊 Tabla resumen")
+        st.dataframe(resumen)
+
+    # Guardar Excel
+    output = "seguimiento_obra_unificado.xlsx"
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_total.to_excel(writer, sheet_name="Datos completos", index=False)
+        if 'resumen' in locals():
+            resumen.to_excel(writer, sheet_name="Resumen")
+
+    # Botón de descarga
+    with open(output, "rb") as f:
+        st.download_button(
+            label="⬇️ Descargar Excel unificado",
+            data=f,
+            file_name=output,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
